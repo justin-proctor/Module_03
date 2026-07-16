@@ -9,7 +9,7 @@ editor: visual
 
 ### Step 5: Perform taxonomic classification with gtdbtk
 
-make and cd checkm directory
+make and cd gtdbtk directory
 
 ``` bash
 mkdir gtdbtk
