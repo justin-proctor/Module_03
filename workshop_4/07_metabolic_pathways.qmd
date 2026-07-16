@@ -9,6 +9,12 @@ editor: visual
 
 ### Step 7: Infer metabolic pathways
 
+make and cd minpath directory
+``` bash
+mkdir minpath
+cd minpath
+```
+
 looking at the contig_137.tsv file for a single bin
 
 ``` bash
