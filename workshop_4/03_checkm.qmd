@@ -1,0 +1,14 @@
+---
+title: "03_checkm"
+author: "Justin Proctor"
+format: html
+editor: visual
+---
+
+## Workshop 4: Metagenome Function
+
+### Step 1: Check Bin Quality with Checkm
+
+```r
+
+```

@@ -1,0 +1,36 @@
+---
+title: "04_select_bins"
+author: "Justin Proctor"
+format: html
+editor: visual
+---
+
+## Workshop 4: Metagenome Function
+
+### Step 4: Select bins based on checkm results
+
+enter checkm directory
+
+``` bash
+cd checkm
+```
+
+exploring ways to format checkm txt file
+
+``` bash
+head checkm_results_bbd.txt 
+head -n 20 checkm_results_bbd.txt 
+```
+
+printing the lines where the 13th column has a value greater than 15 (ie bins with a completeness greater than 15%)
+
+``` bash
+cat checkm_results_bbd.txt | awk '$13>15'
+cat checkm_results_bbd.txt | awk '$13>15{print $1}'
+```
+
+sending the above output to a file so that we can use it in the next step
+
+``` bash
+cat checkm_results_bbd.txt | awk '$13>15{print $1}' > bbd_topbins.txt
+```

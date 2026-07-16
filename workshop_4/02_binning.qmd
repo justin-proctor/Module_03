@@ -1,0 +1,14 @@
+---
+title: "02_binning"
+author: "Justin Proctor"
+format: html
+editor: visual
+---
+
+## Workshop 4: Metagenome Function
+
+### Step 1: Binning with Metabat
+
+```r
+
+```

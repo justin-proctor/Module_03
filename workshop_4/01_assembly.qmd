@@ -1,0 +1,14 @@
+---
+title: "01_assembly"
+author: "Justin Proctor"
+format: html
+editor: visual
+---
+
+## Workshop 4: Metagenome Function
+
+### Step 1: Assembly
+
+```r
+
+```
