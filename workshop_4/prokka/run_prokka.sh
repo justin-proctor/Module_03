@@ -12,3 +12,17 @@ while read bin;do
 done < ../checkm/bbd_topbins.txt
 
 echo "Finished prokka in $(pwd) at $(date)"
+
+
+
+
+# contig_137 output:
+
+#organism: Genus species strain 
+#contigs: 1
+#bases: 4706700
+#CDS: 3913
+#CRISPR: 3
+#rRNA: 4
+#tRNA: 46
+#tmRNA: 1
