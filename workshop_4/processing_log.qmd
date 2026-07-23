@@ -1,0 +1,333 @@
+---
+title: "Processing Log"
+author: "Justin Proctor"
+format: html
+editor: visual
+---
+
+## Workshop 4: Metagenome Function
+
+### Step 1: Assembly
+
+symbolic link to the bbd read data
+
+``` bash
+ln -s /pvol/data/metagenome_assembly/bbd_0.1.fastq.gz .
+```
+
+creating new shell script called run_flye_bbd.sh Had to remove the "raw_data" portion of the script in the file pathway for the code to be successful
+
+``` bash
+#!/bin/bash
+#SBATCH --time=720
+#SBATCH --ntasks=12 --mem=10gb
+
+echo "Starting flye bbd in $(pwd) at $(date)"
+
+flye --nano-hq ../bbd_0.1.fastq.gz --threads 12 --out-dir bbd --meta
+
+echo "Finished flye bbd in $(pwd) at $(date)"
+```
+
+submitted job
+
+``` bash
+sbatch run_flye_bbd.sh
+```
+
+### Step 2: Binning with Metabat
+
+Extract depth information
+
+``` bash
+cat ../flye/bbd/assembly_info.txt  | grep -v '#' | awk '{OFS="\t";print $1,$3}' > depths_bbd.txt
+```
+
+Reorder contigs based on depth
+
+``` bash
+cat depths_bbd.txt | awk '{print $1}' | xargs samtools faidx ../flye/bbd/assembly.fasta > assembly_bbd_ordered.fasta
+```
+
+Run metabat
+
+``` bash
+metabat2 -i assembly_bbd_ordered.fasta -a depths_bbd.txt --cvExt -o bins_bbd/metabat --seed 5
+```
+
+### Step 3: Check Bin Quality with Checkm
+
+display the lengths of all contigs sorted from shortest to longest
+
+``` bash
+cat ../flye/bbd/assembly.fasta | bioawk -c fastx '{print length($seq),$name}' | sort -n
+```
+
+#### contig_137 was the longest contig substitute
+
+Create a folder to hold genome bins.
+
+Copy all automatically generated bins into that folder.
+
+Extract one specific contig from the assembly into its own FASTA file so it can be analysed alongside the bins.
+
+``` bash
+mkdir bins_bbd
+cp ../metabat/bins_bbd/*.fa bins_bbd/
+samtools faidx ../flye/bbd/assembly.fasta contig_137 > bins_bbd/contig_137.fa
+```
+
+creating the slurm script "run_checkm_bbd.sh" and saved within checkm directory
+
+``` bash
+#!/bin/bash
+#SBATCH --time=60
+#SBATCH --ntasks=6 --mem=10gb
+
+echo "Starting checkm in $(pwd) at $(date)"
+
+shopt -s expand_aliases
+alias checkm='apptainer run -B /pvol/:/pvol /pvol/data/sif/checkm.sif checkm'
+
+checkm lineage_wf bins_bbd out -t 4 -x fa -f checkm_results_bbd.txt
+
+echo "Finished checkm in $(pwd) at $(date)"
+```
+
+submit checkm job
+
+``` bash
+sbatch run_checkm_bbd.sh
+```
+
+### Step 4: Select bins based on checkm results
+
+exploring ways to format checkm txt file
+
+``` bash
+head checkm_results_bbd.txt 
+head -n 20 checkm_results_bbd.txt 
+```
+
+printing the lines where the 13th column has a value greater than 15 (ie bins with a completeness greater than 15%)
+
+``` bash
+cat checkm_results_bbd.txt | awk '$13>15'
+cat checkm_results_bbd.txt | awk '$13>15{print $1}'
+```
+
+sending the above output to a file so that we can use it in the next step
+
+``` bash
+cat checkm_results_bbd.txt | awk '$13>15{print $1}' > bbd_topbins.txt
+```
+
+### Step 5: Perform taxonomic classification with gtdbtk
+
+iterating over the list of topbins. For each of the topbins, I copied a file corresponding to that bin into the genomes folder.
+
+step 1: get the while loop working
+
+``` bash
+while read bin;do echo $bin;done < ../checkm/bbd_topbins.txt
+```
+
+step 2: using echo bin to simply print the name of the bin.
+
+Build the complete file path for each genome bin so downstream tools can locate the associated FASTA file. This is achieved by adding the parent directory before the bin name and the .fa extension after it.
+
+``` bash
+while read bin;do echo "../metabat/bins_bbd/${bin}.fa";done \< ../checkm/bbd_topbins.txt
+```
+
+step 3: had to manually move config_137 to metabat directory for step 4 to work
+
+``` bash
+cp checkm/bins_bbd/contig_137.fa metabat/bins_bbd/
+```
+
+step 4: perform the copy
+
+``` bash
+while read bin;do cp "../metabat/bins_bbd/${bin}.fa" genomes;done < ../checkm/bbd_topbins.txt
+```
+
+step 5: run the classification workflow via slurm job script run_gtdbtk.sh (code for it below. Note: changed mem to 40gb)
+
+``` bash
+#!/bin/bash
+#SBATCH --time=60
+#SBATCH --ntasks=2 --mem=40gb
+
+echo "Starting gtdbtk in $(pwd) at $(date)"
+
+shopt -s expand_aliases
+alias gtdbtk='apptainer run -B /pvol:/pvol,/pvol/data/mg/gtdbtkdata/release207_v2/:/refdata /pvol/data/sif/gtdbtk.sif'
+
+gtdbtk classify_wf -x fa --cpus 2 --genome_dir genomes --out_dir out --skip_ani_screen
+
+echo "Finished gtdbtk in $(pwd) at $(date)"
+```
+
+step 6: submit job
+
+``` bash
+sbatch run_gtdbtk.sh
+```
+
+### Step 6: Find and annotate genes with prokka
+
+Prokka will not only identify the gene sequences, it also uses a range of methods to identify homologous genes with known functions. The idea behind this is that if two genes share a common ancestor (ie are homologous) their functions are likely to be similar. This in turn allows Prokka to assign a putative name and function to some of the genes within our newly assembled metagenome bins.
+
+finding out the first bin ID in your list
+
+``` bash
+head -n 1 ../checkm/bbd_topbins.txt
+```
+
+running prokka for a single bin
+
+``` bash
+bin=contig_137
+prokka --outdir $bin --prefix $bin  ../metabat/bins_bbd/${bin}.fa
+```
+
+run prokka on all the metagenomes via another slurm script "run_prokka.sh"
+
+``` bash
+#!/bin/bash
+#SBATCH --time=60
+#SBATCH --ntasks=2 --mem=2gb
+
+echo "Starting prokka in $(pwd) at $(date)"
+
+shopt -s expand_aliases
+alias prokka='apptainer run -B /pvol/:/pvol /pvol/data/sif/prokka.sif prokka'
+
+while read bin;do 
+  prokka --outdir $bin --prefix $bin "../metabat/bins_bbd/${bin}.fa";
+done < ../checkm/bbd_topbins.txt
+
+echo "Finished prokka in $(pwd) at $(date)"
+```
+
+submit job
+
+``` bash
+sbatch run_prokka.sh
+```
+
+### Step 7: Infer metabolic pathways
+
+looking at the contig_137.tsv file for a single bin
+
+``` bash
+head ../prokka/contig_137/contig_137.tsv
+```
+
+General formatting
+
+1\. transforming the tsv into a format that only keeps a unique ID for each gene and its EC number
+
+2\. filter the output to only include lines with an EC number
+
+3\. making the output tab separated and removing the header line
+
+4\. change head to cat to include all genes
+
+``` bash
+head ../prokka/contig_137/contig_137.tsv | awk -F '\t' '{print $1,$5}'
+head ../prokka/contig_137/contig_137.tsv | awk -F '\t' '$5{print $1,$5}'
+head ../prokka/contig_137/contig_137.tsv | awk -F '\t' '$5{OFS="\t";print $1,$5}' | grep -v '^locus'
+cat ../prokka/contig_137/contig_137.tsv | awk -F '\t' '$5{OFS="\t";print $1,$5}' | grep -v '^locus'
+```
+
+sending the output from above to a file so it can be used as an input to minpath
+
+``` bash
+cat ../prokka/contig_137/contig_137.tsv | awk -F '\t' '$5{OFS="\t";print $1,$5}' | grep -v '^locus' > contig_137.ec
+```
+
+run minpath on the file created above
+
+``` bash
+minpath -ec contig_137.ec -report contig_137.ec.report -details contig_137.ec.details
+```
+
+preparing minpath inputs for all bins
+
+``` bash
+while read bin;do 
+  cat ../prokka/$bin/${bin}.tsv | awk -F '\t' '$5{printf("%s\t%s\n", $1,$5)}' | grep -v '^locus' > ${bin}.ec 
+done < ../checkm/bbd_topbins.txt
+```
+
+running minpath on every bin
+
+``` bash
+while read bin;do 
+  minpath -ec ${bin}.ec -report ${bin}.ec.report -details ${bin}.ec.details
+done < ../checkm/bbd_topbins.txt
+```
+
+filtering the minpath outputs from above for pathways that includes Photosystem I and Photosystem II (essential components of photosynthesis that occur in light)
+
+``` bash
+grep 'PWY-101' *.ec.report
+```
+
+the filtered outputs:
+
+contig_137.ec.report:path PWY-101 any n/a naive 1 minpath 0 fam0 4 fam-found 1 name photosynthesis light reactions
+
+metabat.27.ec.report:path PWY-101 any n/a naive 1 minpath 1 fam0 4 fam-found 4 name photosynthesis light reactions
+
+metabat.59.ec.report:path PWY-101 any n/a naive 1 minpath 0 fam0 4 fam-found 1 name photosynthesis light reactions
+
+#### Question 4.1:
+
+How many bins contain at least one gene from this pathway?
+
+3 bins
+
+Which bin has all of the genes (ie a complete pathway)?
+
+1 bin: matabat.27
+
+Cross referencing the above results with the output from gtdbtk to see the taxonomy of bins containing this same pathway
+
+``` bash
+grep 'contig_137' ../gtdbtk/out/gtdbtk.bac120.summary.tsv
+grep 'metabat.27' ../gtdbtk/out/gtdbtk.bac120.summary.tsv
+grep 'metabat.59' ../gtdbtk/out/gtdbtk.bac120.summary.tsv
+```
+
+filtering the minpath outputs again. This time for the superpathway of tetrathionate reduction. This pathway is important because it includes enzymes required to reduce sulfite to hydrogen sulfide. Note that sulfite acts as the terminal electron acceptor in this pathway, however, in a broader sense the term “sulfate reducing” refers to micro-organisms that can produce sulfide from a range of oxidised sulfur compounds.
+
+``` bash
+grep 'PWY-5360' *.ec.report
+```
+
+filtered outputs:
+
+metabat.6.ec.report:path PWY-5360 any n/a naive 1 minpath 0 fam0 3 fam-found 1 name superpathway of tetrathionate reduction (Salmonella typhimurium)
+
+\*not Salmonella typhimurium: this is a red herring and comes from the minpath database
+
+Cross referencing the above results with the output from gtdbtk to see the taxonomy of bins containing this same pathway
+
+``` bash
+grep 'metabat.6' ../gtdbtk/out/gtdbtk.bac120.summary.tsv
+```
+
+#### Question 4.2:
+
+How many bins contain the pathway PWY-5360?
+
+1 bin
+
+What family (in a taxonomic sense) do these bins belong to?
+
+Arcobacteraceae
+
+grep 'metabat.6' ../gtdbtk/out/gtdbtk.bac120.summary.tsv
