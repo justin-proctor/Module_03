@@ -1,6 +1,3 @@
 # Module_03: Marine Genomics
 
-## Workshop 4: Metagenome function
-This workshop focuses on metagenome assembly of Black Band Disease
-
 Throughout the workshops, I developed practical bioinformatics skills for analyzing microbial and metagenomic sequencing data using the Linux command line and high-performance computing (HPC) environments. I learned to assess sequencing read quality, assemble genomes, evaluate assembly quality, reconstruct metagenome-assembled genomes (MAGs), assess bin completeness and contamination, perform taxonomic classification, annotate genes, and infer metabolic pathways using widely adopted genomics software. The module emphasized reproducible bioinformatics workflows through Bash scripting, job scheduling with SLURM, version control with Git and GitHub, and clear documentation of analytical pipelines. Together, these exercises provided a strong foundation in modern marine genomics and metagenomics, linking raw sequencing data to taxonomic, functional, and ecological interpretation using reproducible computational workflows.
