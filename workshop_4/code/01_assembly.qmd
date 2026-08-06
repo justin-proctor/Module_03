@@ -1,0 +1,42 @@
+---
+title: "01_assembly"
+author: "Justin Proctor"
+format: html
+editor: visual
+---
+
+## Workshop 4: Metagenome Function
+
+### Step 1: Assembly
+
+make flye directory
+
+``` bash
+mkdir flye
+```
+
+symbolic link to the bbd read data
+
+``` bash
+ln -s /pvol/data/metagenome_assembly/bbd_0.1.fastq.gz .
+```
+
+creating new shell script called run_flye_bbd.sh Had to remove the "raw_data" portion of the script in the file pathway for the code to be successful
+
+``` bash
+#!/bin/bash
+#SBATCH --time=720
+#SBATCH --ntasks=12 --mem=10gb
+
+echo "Starting flye bbd in $(pwd) at $(date)"
+
+flye --nano-hq ../bbd_0.1.fastq.gz --threads 12 --out-dir bbd --meta
+
+echo "Finished flye bbd in $(pwd) at $(date)"
+```
+
+submitted job
+
+``` bash
+sbatch run_flye_bbd.sh
+```
